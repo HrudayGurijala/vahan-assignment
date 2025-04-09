@@ -1,4 +1,3 @@
-# app/services/audio_service.py
 import os
 from gtts import gTTS
 
@@ -22,6 +21,7 @@ class AudioService:
             
             # Generate audio file using Google Text-to-Speech
             tts = gTTS(text=text, lang='en', slow=False)
+            # tts = gTTS(text=text, lang='en', slow=False, tld='co.in') // Uncomment for Indian English accent
             tts.save(output_path)
             
             return True

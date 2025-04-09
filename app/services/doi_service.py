@@ -1,4 +1,3 @@
-# app/services/doi_service.py
 import requests
 from typing import Optional, Dict, Any
 

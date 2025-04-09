@@ -1,6 +1,9 @@
 from datetime import datetime
 import PyPDF2
 from typing import Dict, Any, Optional
+import requests
+import os
+import io
 
 
 class PdfService:
@@ -134,3 +137,41 @@ class PdfService:
                 break
 
         return abstract
+    
+    def download_pdf(self, url: str, output_path: str) -> bool:
+        """
+        Download a PDF from a URL and save it to the specified path
+        
+        Args:
+            url: URL of the PDF to download
+            output_path: Path where the PDF should be saved
+            
+        Returns:
+            True if download was successful, False otherwise
+        """
+        try:
+            # Create directory if it doesn't exist
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            
+            # Send HTTP request with timeout
+            response = requests.get(url, timeout=30)
+            response.raise_for_status()  # Raise an exception for error status codes
+            
+            # Check if content is likely a PDF
+            content_type = response.headers.get('Content-Type', '')
+            if 'application/pdf' not in content_type and not url.lower().endswith('.pdf'):
+                # If URL doesn't end with .pdf and content-type isn't PDF, try to validate content
+                try:
+                    # Try to read it as a PDF to validate
+                    PyPDF2.PdfReader(io.BytesIO(response.content))
+                except:
+                    raise ValueError("Downloaded content does not appear to be a valid PDF")
+            
+            # Save the PDF
+            with open(output_path, 'wb') as f:
+                f.write(response.content)
+                
+            return True
+        except Exception as e:
+            print(f"Error downloading PDF from {url}: {str(e)}")
+            raise e  # Re-raise the exception to be caught by the caller

@@ -1,4 +1,3 @@
-# app/models/paper.py
 from pydantic import BaseModel, Field, HttpUrl
 from typing import List, Optional, Dict, Any
 from datetime import datetime

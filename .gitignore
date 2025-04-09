@@ -1,3 +1,8 @@
 .env
-/outputs/*
-/uploads
+# Ignore environment variable files
+
+uploads/*
+# Ignore all files in the uploads directory
+
+outputs/*
+# Ignore all files in the outputs directory
