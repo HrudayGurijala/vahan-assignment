@@ -19,7 +19,7 @@ class SummaryWriterAgent:
         full_text: str
     ) -> Dict[str, Any]:
         """
-        Generate a brief, precise summary of a research paper
+        Generate a brief summary of a research paper clearly outlining methodologies and key ideas
         
         Args:
             full_text: Full text of the paper
@@ -30,19 +30,20 @@ class SummaryWriterAgent:
         # Prepare prompt for the LLM
         system_prompt = """
         You are a research paper summarization expert. Your task is to create a brief, 
-        precise summary of an academic paper focusing on:
+         summary of an academic paper focusing on:
         
-        1. The main findings and contributions
-        2. ALL methodologies used (be specific and comprehensive about methods)
+        1. The main findings of the research and their usecases
+        2. ALL methodologies used 
         3. The key ideas presented in the paper
-        4. The implications of the research
+        4. The results and implications of the research
+        5. Future directions or recommendations if mentioned
         
         Keep the summary concise (about 3-4 paragraphs maximum). Use plain text format only.
         Do not use markdown formatting, lists, bullets, or headers in your response.
         """
         
         user_prompt = f"""
-        Please create a brief, precise summary of the following research paper, focusing specifically on capturing ALL methodologies and key ideas mentioned:
+        Please create a brief,  summary of the following research paper, focusing specifically on capturing ALL methodologies and key ideas mentioned:
         
         Paper content:
         {full_text[:5000]}  # Limiting to avoid token limits

@@ -33,7 +33,7 @@ class ProofReaderAgent:
         You are an expert academic editor specializing in research paper summaries. 
         Your task is to review and improve a draft summary of an academic paper.
         
-        1. Make the summary brief and precise (3-4 paragraphs maximum)
+        1. Make the summary brief and focusing on the main findings and methodologies
         2. Ensure ALL methodologies mentioned in the paper are included
         3. Capture the key ideas accurately
         4. Use plain text ONLY - no markdown, no bullet points, no formatting
