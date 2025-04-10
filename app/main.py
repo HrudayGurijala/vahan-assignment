@@ -6,6 +6,7 @@ import uvicorn
 import os
 import uuid
 import shutil
+import json
 from datetime import datetime
 from pydantic import BaseModel, HttpUrl, Field
 
@@ -57,6 +58,13 @@ class PaperSummary(BaseModel):
     citations: List[str] = []
     audio_file_path: Optional[str] = None
     
+    class Config:
+        # Allow arbitrary types to handle datetime serialization
+        arbitrary_types_allowed = True
+        json_encoders = {
+            datetime: lambda dt: dt.isoformat() if dt else None
+        }
+    
 class ProcessingStatus(BaseModel):
     task_id: str
     status: str  # pending, processing, completed, failed
@@ -72,6 +80,7 @@ summaries_db = {}
 os.makedirs("uploads", exist_ok=True)
 os.makedirs("outputs", exist_ok=True)
 os.makedirs("outputs/audio", exist_ok=True)
+os.makedirs("outputs/summaries", exist_ok=True)  # Add directory for storing summaries
 
 # Import services and agents
 from app.services.arxiv_service import ArxivService
@@ -91,6 +100,23 @@ audio_service = AudioService()
 
 summary_writer = SummaryWriterAgent()
 proof_reader = ProofReaderAgent()
+
+# Helper function to save summary to file
+def save_summary_to_file(summary_id: str, paper_summary: PaperSummary):
+    """Save the paper summary to a JSON file"""
+    # Convert the PaperSummary to a dictionary
+    summary_dict = paper_summary.dict()
+    
+    # Handle datetime serialization
+    if summary_dict['metadata']['publication_date']:
+        summary_dict['metadata']['publication_date'] = summary_dict['metadata']['publication_date'].isoformat()
+    
+    # Save to file
+    summary_file_path = f"outputs/summaries/{summary_id}.json"
+    with open(summary_file_path, "w") as f:
+        json.dump(summary_dict, f, indent=2)
+    
+    return summary_file_path
 
 @app.post("/papers/search", response_model=List[PaperMetadata])
 async def search_papers(params: ArxivSearchParams):
@@ -133,10 +159,6 @@ async def search_papers(params: ArxivSearchParams):
                     source="arxiv"
                 )
                 results.append(metadata)
-            
-        return results
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error searching papers: {str(e)}")
             
         return results
     except Exception as e:
@@ -220,8 +242,8 @@ async def get_task_status(task_id: str):
     task = processing_tasks[task_id]
     result = None
     
-    if task["status"] == "completed" and "summary_id" in task:
-        result = summaries_db.get(task["summary_id"])
+    if task["status"] == "completed":
+        result = summaries_db.get(task_id)
         
     return ProcessingStatus(
         task_id=task_id,
@@ -252,6 +274,22 @@ async def get_summary_audio(summary_id: str):
         summary.audio_file_path, 
         media_type="audio/mpeg", 
         filename=f"summary_{summary_id}.mp3"
+    )
+
+@app.get("/summaries/{summary_id}/file")
+async def get_summary_file(summary_id: str):
+    """Get the JSON file for a summary"""
+    if summary_id not in summaries_db:
+        raise HTTPException(status_code=404, detail="Summary not found")
+        
+    summary_file_path = f"outputs/summaries/{summary_id}.json"
+    if not os.path.exists(summary_file_path):
+        raise HTTPException(status_code=404, detail="Summary file not found")
+        
+    return FileResponse(
+        summary_file_path,
+        media_type="application/json",
+        filename=f"summary_{summary_id}.json"
     )
 
 async def process_paper_task(task_id: str, file_path: str, topics: List[str]):
@@ -291,7 +329,7 @@ async def process_paper_task(task_id: str, file_path: str, topics: List[str]):
         audio_service.generate_audio(final_summary["summary"], audio_file_path)
         
         # Create summary object
-        summary_id = str(uuid.uuid4())
+        summary_id = task_id
         paper_summary = PaperSummary(
             paper_id=task_id,
             metadata=metadata,  # Add the metadata here
@@ -303,13 +341,16 @@ async def process_paper_task(task_id: str, file_path: str, topics: List[str]):
             audio_file_path=audio_file_path
         )
         
-        # Save summary
+        # Save summary to in-memory database
         summaries_db[summary_id] = paper_summary
+        
+        # Save summary to file
+        summary_file_path = save_summary_to_file(summary_id, paper_summary)
         
         # Update task status
         processing_tasks[task_id].update({
             "status": "completed",
-            "summary_id": summary_id
+            "summary_file_path": summary_file_path
         })
         
     except Exception as e:
@@ -322,7 +363,7 @@ async def process_paper_task(task_id: str, file_path: str, topics: List[str]):
 async def process_url_task(task_id: str, url: str, topics: List[str]):
     """Background task to process a paper from URL"""
     try:
-        print(f"Starting URL task processing for task_id: {task_id}, URL: {url}")
+        # print(f"Starting URL task processing for task_id: {task_id}, URL: {url}")
         processing_tasks[task_id]["status"] = "processing"
         
         # Create the uploads directory if it doesn't exist
@@ -331,41 +372,41 @@ async def process_url_task(task_id: str, url: str, topics: List[str]):
         # Download paper from URL
         file_path = f"uploads/url_{task_id}.pdf"
         
-        print(f"Attempting to download PDF from {url}")
+        # print(f"Attempting to download PDF from {url}")
         try:
             pdf_service.download_pdf(url, file_path)
         except Exception as download_error:
-            print(f"Download failed: {str(download_error)}")
+            # print(f"Download failed: {str(download_error)}")
             processing_tasks[task_id].update({
                 "status": "failed",
                 "message": f"Failed to download PDF from URL: {str(download_error)}"
             })
             return
         
-        print(f"Download completed. Checking file at {file_path}")
+        # print(f"Download completed. Checking file at {file_path}")
         # Verify the file exists and has content
         if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
-            print(f"File verification failed: File empty or not found")
+            # print(f"File verification failed: File empty or not found")
             processing_tasks[task_id].update({
                 "status": "failed",
                 "message": "Downloaded file is empty or does not exist"
             })
             return
             
-        print(f"Successfully downloaded PDF from URL to {file_path}")
+        # print(f"Successfully downloaded PDF from URL to {file_path}")
         
         # Extract text from PDF
-        print(f"Extracting text from PDF")
+        # print(f"Extracting text from PDF")
         text_content = pdf_service.extract_text(file_path)
         if not text_content:
-            print(f"Text extraction failed: No text content extracted")
+            # print(f"Text extraction failed: No text content extracted")
             processing_tasks[task_id].update({
                 "status": "failed",
                 "message": "Could not extract text from the PDF"
             })
             return
         
-        print(f"Text extraction successful. Content length: {len(text_content)}")
+        # print(f"Text extraction successful. Content length: {len(text_content)}")
         
         # Create basic metadata for the downloaded file
         metadata = PaperMetadata(
@@ -378,21 +419,21 @@ async def process_url_task(task_id: str, url: str, topics: List[str]):
         )
         
         # Generate summary using the writer agent
-        print(f"Generating summary draft")
+        # print(f"Generating summary draft")
         try:
             draft_summary = summary_writer.generate_summary(
                 full_text=text_content
             )
             
-            print(f"Draft summary generated. Sending to proof reader")
+            # print(f"Draft summary generated. Sending to proof reader")
             # Proof-read and improve the summary
             final_summary = proof_reader.review_summary(
                 draft_summary=draft_summary,
                 full_text=text_content
             )
-            print(f"Final summary created")
+            # print(f"Final summary created")
         except Exception as summary_error:
-            print(f"Summary generation failed: {str(summary_error)}")
+            # print(f"Summary generation failed: {str(summary_error)}")
             processing_tasks[task_id].update({
                 "status": "failed",
                 "message": f"Error generating summary: {str(summary_error)}"
@@ -400,18 +441,18 @@ async def process_url_task(task_id: str, url: str, topics: List[str]):
             return
         
         # Generate audio for the summary
-        print(f"Generating audio")
+        # print(f"Generating audio")
         audio_file_path = f"outputs/audio/summary_{task_id}.mp3"
         try:
             audio_service.generate_audio(final_summary["summary"], audio_file_path)
-            print(f"Audio generation complete")
+            # print(f"Audio generation complete")
         except Exception as audio_error:
-            print(f"Audio generation failed: {str(audio_error)}")
+            # print(f"Audio generation failed: {str(audio_error)}")
             # Continue even if audio fails - it's not critical
             audio_file_path = None
         
         # Create summary object
-        summary_id = str(uuid.uuid4())
+        summary_id = task_id
         paper_summary = PaperSummary(
             paper_id=task_id,
             metadata=metadata,
@@ -423,19 +464,23 @@ async def process_url_task(task_id: str, url: str, topics: List[str]):
             audio_file_path=audio_file_path
         )
         
-        # Save summary
-        print(f"Saving summary with ID: {summary_id}")
+        # Save summary to in-memory database
+        # print(f"Saving summary with ID: {summary_id}")
         summaries_db[summary_id] = paper_summary
+        
+        # Save summary to file
+        summary_file_path = save_summary_to_file(summary_id, paper_summary)
+        # print(f"Summary saved to file: {summary_file_path}")
         
         # Update task status
         processing_tasks[task_id].update({
             "status": "completed",
-            "summary_id": summary_id
+            "summary_file_path": summary_file_path
         })
-        print(f"Task completed successfully")
+        # print(f"Task completed successfully")
         
     except Exception as e:
-        print(f"Unexpected error in process_url_task: {str(e)}")
+        # print(f"Unexpected error in process_url_task: {str(e)}")
         import traceback
         traceback.print_exc()
         processing_tasks[task_id].update({
