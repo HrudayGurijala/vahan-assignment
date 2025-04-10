@@ -182,3 +182,92 @@ research-paper-summarizer/
 ├── requirements.txt
 └── README.md
 ```
+
+# Testing
+
+---
+
+## `POST /papers/search`
+
+```bash
+curl -X POST http://localhost:8000/papers/search \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "machine learning",
+    "max_results": 5,
+    "sort_by": "relevance"
+  }'
+```
+
+---
+
+## `POST /papers/upload`
+
+```bash
+curl -X POST http://localhost:8000/papers/upload \
+  -F "file=@/path/to/your/paper.pdf"
+```
+
+---
+
+## `POST /papers/url`
+
+```bash
+curl -X POST http://localhost:8000/papers/url \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://arxiv.org/pdf/2107.12345.pdf"
+  }'
+```
+
+---
+
+## `POST /papers/doi`
+
+```bash
+curl -X POST http://localhost:8000/papers/doi \
+  -H "Content-Type: application/json" \
+  -d '{
+    "doi": "10.1109/5.771073"
+  }'
+```
+
+---
+
+## `GET /tasks/{task_id}`
+
+```bash
+curl http://localhost:8000/tasks/your_task_id_here
+```
+
+---
+
+## `GET /summaries/{summary_id}`
+
+```bash
+curl http://localhost:8000/summaries/your_summary_id_here
+```
+
+---
+
+## `GET /summaries/{summary_id}/audio`
+
+```bash
+curl http://localhost:8000/summaries/your_summary_id_here/audio --output summary.mp3
+```
+
+---
+
+## `GET /summaries/{summary_id}/file`
+
+```bash
+curl http://localhost:8000/summaries/your_summary_id_here/file --output summary.json
+```
+
+---
+
+Replace `your_task_id_here` and `your_summary_id_here` with actual IDs you receive from previous requests.
+
+### I have included the research paper I have used for the upload pdf is attached in the repository [basepaper.pdf]
+
+### This is the URL of the other research paper from the demo [https://arxiv.org/pdf/2304.02924v1]
